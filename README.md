@@ -3,6 +3,9 @@
 SISTEMA DE REGISTROS DE ALUNOS - CRUD COM SQLITE
 ==================================================================
 Disciplina: Desenvolvimento Rápido de Aplicações em Python
+Alunos: Tamiris da Silva Tedesche Cerdeira - matrícula: 202508191831
+        Samuel de Holanda Reis             -            202504275037
+
 Funcionalidades: Cadastrar, Listar, Buscar, Atualizar e Excluir
 Banco de Dados: SQLite (arquivo: escola.db)
 Interface: Texto (terminal)
