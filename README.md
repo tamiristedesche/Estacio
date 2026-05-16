@@ -34,7 +34,7 @@ def criar_tabela():
     # 2. Comando SQL para criar a tabela
     cursor.execute ("""
           CREATE TABLE IF NOT EXISTS alunos (
-             id INTERGER PRIMARY KEY AUTOINCREMENT,
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
              nome TEXT NOT NULL,
              matricula TEXT UNIQUE NOT NULL, 
              curso TEXT NOT NULL,
