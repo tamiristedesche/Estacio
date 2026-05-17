@@ -9,12 +9,30 @@ Alunos: Tamiris da Silva Tedesche Cerdeira - matrícula: 202508191831
 Funcionalidades: Cadastrar, Listar, Buscar, Atualizar e Excluir
 Banco de Dados: SQLite (arquivo: escola.db)
 Interface: Texto (terminal)
+
+==================================================================
+OBSERVAÇÃO SOBRE A ESCOLHA DO BANCO DE DADOS
+==================================================================
+Para este sistema, decidimos utilizar o SQLite porque ele é mais simples.
+Não precisa instalar servidor, o banco fica num único arquivo (escola.db)
+e a biblioteca já vem com o Python.
+
+O PostgreSQL oferece recursos como triggers, stored procedures e controle
+de usuários, mas analisando o nosso código, percebemos que não usaríamos
+nada disso. Nosso sistema faz apenas as operações básicas de CRUD e a
+escola é de pequeno porte, com poucos usuários simultâneos.
+
+Por esses motivos, optamos pelo SQLite, que atende todas as necessidades
+do sistema sem adicionar complexidade desnecessária.
 ==================================================================
 """
 # ================================================================
 # BIBLIOTECAS
 # ================================================================
-import sqlite3 # Para trabalhar com o banco de dados SQLite
+import sqlite3  # Para trabalhar com o banco de dados SQLite
+import os       # Para limpar a tela
+
+
 # ================================================================
 # PARTE 1: FUNÇÕES DO BANCO DE DADOS
 # ================================================================
@@ -25,6 +43,8 @@ def conectar():
     RETORNA: Um objeto de conexão com o arquivo escola.db
     """
     return sqlite3.connect("escola.db")
+
+
 def criar_tabela():
     """
     FUNÇÃO: criar_tabela()
@@ -34,25 +54,29 @@ def criar_tabela():
     # 1. Conectar ao banco
     conexao = conectar()
     cursor = conexao.cursor()
+    
     # 2. Comando SQL para criar a tabela
-    cursor.execute ("""
-          CREATE TABLE IF NOT EXISTS alunos (
-             id INTEGER PRIMARY KEY AUTOINCREMENT,
-             nome TEXT NOT NULL,
-             matricula TEXT UNIQUE NOT NULL, 
-             curso TEXT NOT NULL,
-             nota1 REAL,
-             nota2 REAL              
-          )  
-    """) 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alunos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            matricula TEXT UNIQUE NOT NULL,
+            curso TEXT NOT NULL,
+            nota1 REAL,
+            nota2 REAL
+        )
+    """)
+    
     # 3. Salvar e fechar
     conexao.commit()
     conexao.close()
+
+
 # ================================================================
 # PARTE 2: OPERAÇÕES CRUD (Create, Read, Update, Delete)
 # ================================================================
 # ----------------------------------------------------------------
-# CREATE: Casdastrar novo aluno
+# CREATE: Cadastrar novo aluno
 # ----------------------------------------------------------------
 def cadastrar_aluno(nome, matricula, curso, nota1, nota2):
     """
@@ -77,9 +101,10 @@ def cadastrar_aluno(nome, matricula, curso, nota1, nota2):
     except sqlite3.IntegrityError:
         # Este erro ocorre quando a matrícula já existe
         return False  # Falha no cadastro
-    
+
+
 # ----------------------------------------------------------------
-# READ: Casdastrar novo aluno
+# READ: Listar todos os alunos
 # ----------------------------------------------------------------
 def listar_alunos():
     """
@@ -89,28 +114,30 @@ def listar_alunos():
     """
     conexao = conectar()
     cursor = conexao.cursor()
-    cursor.execute(""" 
+    cursor.execute("""
         SELECT id, nome, matricula, curso, nota1, nota2
         FROM alunos
         ORDER BY id
-        """)
+    """)
     alunos = cursor.fetchall()
     conexao.close()
     return alunos
+
+
 # ----------------------------------------------------------------
-# READ: Buscar aluno específico
+# READ: Buscar aluno por nome ou matrícula
 # ----------------------------------------------------------------
 def buscar_aluno(termo):
     """
     FUNÇÃO: buscar_aluno()
     OBJETIVO: Encontrar alunos pelo nome ou matrícula
     PARÂMETRO: termo - texto digitado pelo usuário
-    RETORNA: Lista de alunos que correspodem à busca
+    RETORNA: Lista de alunos que correspondem à busca
+    OBSERVAÇÃO: O símbolo % significa "qualquer caractere"
+    Exemplo: %joão% encontra "João", "Joãozinho", "Maria João"
     """
     conexao = conectar()
     cursor = conexao.cursor()
-    # O símbolo % significa "qualquer caractere"
-    # Exemplo: %joão% encontra "João", "Joãozinho", "Maria João"
     cursor.execute("""
         SELECT id, nome, matricula, curso, nota1, nota2
         FROM alunos
@@ -121,12 +148,14 @@ def buscar_aluno(termo):
     resultados = cursor.fetchall()
     conexao.close()
     return resultados
+
+
 # ----------------------------------------------------------------
 # UPDATE: Atualizar dados de um aluno
 # ----------------------------------------------------------------
 def atualizar_aluno(id_aluno, nome, curso, nota1, nota2):
     """
-    FUNÇÃO: atualizar_alunos
+    FUNÇÃO: atualizar_aluno()
     OBJETIVO: Modificar os dados de um aluno existente
     PARÂMETROS: id_aluno (identificador), nome, curso, nota1, nota2
     """
@@ -141,6 +170,8 @@ def atualizar_aluno(id_aluno, nome, curso, nota1, nota2):
     
     conexao.commit()
     conexao.close()
+
+
 # ----------------------------------------------------------------
 # DELETE: Excluir um aluno
 # ----------------------------------------------------------------
@@ -157,6 +188,8 @@ def excluir_aluno(id_aluno):
     
     conexao.commit()
     conexao.close()
+
+
 # ================================================================
 # PARTE 3: INTERFACE COM O USUÁRIO (TUDO QUE APARECE NA TELA)
 # ================================================================
@@ -175,11 +208,13 @@ def exibir_menu():
     print("  5 → Excluir um aluno")
     print("  0 → Sair do sistema")
     print("-" * 50)
+
+
 def mostrar_alunos(alunos, titulo="LISTA DE ALUNOS"):
     """
     FUNÇÃO: mostrar_alunos()
     OBJETIVO: Exibir os alunos de forma organizada na tela
-    PARÂMETROS: 
+    PARÂMETROS:
         - alunos: lista de tuplas com os dados
         - titulo: título que aparece antes da lista
     """
@@ -198,13 +233,10 @@ def mostrar_alunos(alunos, titulo="LISTA DE ALUNOS"):
         id_aluno, nome, matricula, curso, nota1, nota2 = aluno
         
         # Cálculo da média
-        if nota1 is not None and nota2 is not None:
-            media = (nota1 + nota2) / 2
-        else:
-            media = 0
+        media = (nota1 + nota2) / 2 if nota1 and nota2 else 0
         
         # Define situação (média >= 6 = APROVADO)
-        situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+        situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❎"
         
         # Exibe os dados
         print(f"\n  📌 ID: {id_aluno}")
@@ -214,6 +246,8 @@ def mostrar_alunos(alunos, titulo="LISTA DE ALUNOS"):
         print(f"     Notas: {nota1:.1f} e {nota2:.1f}")
         print(f"     Média: {media:.1f} - {situacao}")
         print("-" * 50)
+
+
 def cadastrar_interface():
     """
     FUNÇÃO: cadastrar_interface()
@@ -223,24 +257,57 @@ def cadastrar_interface():
     print("        CADASTRO DE NOVO ALUNO")
     print("=" * 50)
     
-    # Coleta os dados do usuário
+    # 1. Coleta o nome
     nome = input("  Nome completo: ").strip()
-    matricula = input("  Matrícula: ").strip()
+    while not nome:
+        print("  ❎ ERRO: Nome é obrigatório!")
+        nome = input("  Nome completo: ").strip()
+    
+    # 2. Loop para matrícula (vai repetir até digitar uma matrícula que não exista)
+    while True:
+        matricula = input("  Matrícula: ").strip()
+        while not matricula:
+            print("  ❎ ERRO: Matrícula é obrigatória!")
+            matricula = input("  Matrícula: ").strip()
+        
+        # Verifica se a matrícula já existe
+        conexao = conectar()
+        cursor = conexao.cursor()
+        cursor.execute("SELECT id FROM alunos WHERE matricula = ?", (matricula,))
+        existe = cursor.fetchone()
+        conexao.close()
+        
+        if existe:
+            print(f"  ❎ ERRO: Matrícula '{matricula}' já existe! Digite outra matrícula.\n")
+            continue  # Volta para pedir nova matrícula
+        else:
+            break  # Matrícula é válida, sai do loop
+    
+    # 3. Coleta o curso
     curso = input("  Curso: ").strip()
+    while not curso:
+        print("  ❎ ERRO: Curso é obrigatório!")
+        curso = input("  Curso: ").strip()
     
-    # Tratamento de erro para notas
-    try:
-        nota1 = float(input("  Primeira nota: "))
-        nota2 = float(input("  Segunda nota: "))
-    except ValueError:
-        print("\n  ❌ ERRO: Notas devem ser números!")
-        return
+    # 4 e 5. Coleta as notas
+    while True:
+        try:
+            nota1 = float(input("  Primeira nota (0-10): "))
+            nota2 = float(input("  Segunda nota (0-10): "))
+            if 0 <= nota1 <= 10 and 0 <= nota2 <= 10:
+                break
+            else:
+                print("  ❎ ERRO: As notas devem estar entre 0 e 10!")
+                print("  🔄 Digite as notas novamente.\n")
+        except ValueError:
+            print("  ❎ ERRO: Notas devem ser números!")
+            print("  🔄 Digite as notas novamente.\n")
     
-    # Tenta cadastrar
+    # Cadastra o aluno
     if cadastrar_aluno(nome, matricula, curso, nota1, nota2):
         print(f"\n  ✅ ALUNO CADASTRADO COM SUCESSO!")
-    else:
-        print(f"\n  ❌ ERRO: Matrícula {matricula} já existe!")
+
+
 def listar_interface():
     """
     FUNÇÃO: listar_interface()
@@ -248,6 +315,8 @@ def listar_interface():
     """
     alunos = listar_alunos()
     mostrar_alunos(alunos, "TODOS OS ALUNOS CADASTRADOS")
+
+
 def buscar_interface():
     """
     FUNÇÃO: buscar_interface()
@@ -265,6 +334,8 @@ def buscar_interface():
     
     resultados = buscar_aluno(termo)
     mostrar_alunos(resultados, f"RESULTADOS PARA: '{termo}'")
+
+
 def atualizar_interface():
     """
     FUNÇÃO: atualizar_interface()
@@ -288,7 +359,7 @@ def atualizar_interface():
     try:
         id_aluno = int(input("\n  Digite o ID do aluno que deseja atualizar: "))
     except ValueError:
-        print("\n  ❌ ERRO: ID deve ser um número!")
+        print("\n  ❎ ERRO: ID deve ser um número!")
         return
     
     # Busca os dados atuais do aluno
@@ -299,7 +370,7 @@ def atualizar_interface():
     conexao.close()
     
     if not dados_atuais:
-        print("\n  ❌ ERRO: Aluno não encontrado!")
+        print("\n  ❎ ERRO: Aluno não encontrado!")
         return
     
     # Mostra os dados atuais
@@ -310,28 +381,39 @@ def atualizar_interface():
     
     print("\n  (Deixe em branco para manter o valor atual)")
     
-    # Coleta os novos dados
+    # Coleta os novos dados (pode deixar em branco)
     novo_nome = input(f"  Novo nome [{dados_atuais[0]}]: ").strip()
     novo_curso = input(f"  Novo curso [{dados_atuais[1]}]: ").strip()
     
+    # Coleta as notas com opção de deixar em branco
+    print("\n  📝 Digite as novas notas (ou Enter para manter):")
+    
     try:
-        nova_nota1_str = input(f"  Nova nota 1 [{dados_atuais[2]}]: ").strip()
-        nova_nota2_str = input(f"  Nova nota 2 [{dados_atuais[3]}]: ").strip()
+        nova_nota1_str = input(f"  Nova nota 1 (0-10) [{dados_atuais[2]}]: ").strip()
+        nova_nota2_str = input(f"  Nova nota 2 (0-10) [{dados_atuais[3]}]: ").strip()
         
-        # Se deixou em branco, mantém o valor antigo
         nova_nota1 = float(nova_nota1_str) if nova_nota1_str else dados_atuais[2]
         nova_nota2 = float(nova_nota2_str) if nova_nota2_str else dados_atuais[3]
+        
+        if nova_nota1_str and (nova_nota1 < 0 or nova_nota1 > 10):
+            print("\n  ❎ ERRO: A nota deve estar entre 0 e 10!")
+            return
+        if nova_nota2_str and (nova_nota2 < 0 or nova_nota2 > 10):
+            print("\n  ❎ ERRO: A nota deve estar entre 0 e 10!")
+            return
     except ValueError:
-        print("\n  ❌ ERRO: Notas devem ser números!")
+        print("\n  ❎ ERRO: Notas devem ser números!")
         return
     
-    # Define os valores finais
+    # Define os valores finais (se vazio, mantém o antigo)
     nome_final = novo_nome if novo_nome else dados_atuais[0]
     curso_final = novo_curso if novo_curso else dados_atuais[1]
     
     # Atualiza o aluno
     atualizar_aluno(id_aluno, nome_final, curso_final, nova_nota1, nova_nota2)
     print("\n  ✅ DADOS ATUALIZADOS COM SUCESSO!")
+
+
 def excluir_interface():
     """
     FUNÇÃO: excluir_interface()
@@ -355,7 +437,7 @@ def excluir_interface():
     try:
         id_aluno = int(input("\n  Digite o ID do aluno que deseja EXCLUIR: "))
     except ValueError:
-        print("\n  ❌ ERRO: ID deve ser um número!")
+        print("\n  ❎ ERRO: ID deve ser um número!")
         return
     
     # Busca o nome do aluno para confirmar
@@ -366,7 +448,7 @@ def excluir_interface():
     conexao.close()
     
     if not aluno:
-        print("\n  ❌ ERRO: Aluno não encontrado!")
+        print("\n  ❎ ERRO: Aluno não encontrado!")
         return
     
     # Confirmação (para evitar exclusão acidental)
@@ -377,9 +459,11 @@ def excluir_interface():
         excluir_aluno(id_aluno)
         print("\n  ✅ ALUNO EXCLUÍDO COM SUCESSO!")
     else:
-        print("\n  ❌ EXCLUSÃO CANCELADA!")
+        print("\n  ❎ EXCLUSÃO CANCELADA!")
+
+
 # ================================================================
-# PARTE 4: INTERFACE COM O USUÁRIO (TUDO QUE APARECE NA TELA)
+# PARTE 4: FUNÇÃO PRINCIPAL (CONTROLA TODO O FLUXO)
 # ================================================================
 def main():
     """
@@ -434,19 +518,19 @@ def main():
         
         # OPÇÃO INVÁLIDA
         else:
-            print("\n  ❌ OPÇÃO INVÁLIDA!")
+            print("\n  ❎ OPÇÃO INVÁLIDA!")
             print("  Digite 1, 2, 3, 4, 5 ou 0")
         
         # Pausa antes de limpar a tela (para o usuário ler as mensagens)
         input("\n  Pressione ENTER para continuar...")
         
         # Limpa a tela (funciona no Windows, Linux e Mac)
-        import os
         os.system("cls" if os.name == "nt" else "clear")
+
+
 # ================================================================
 # PONTO DE ENTRADA DO PROGRAMA
 # ================================================================
-# Esta linha verifica se o arquivo está sendo executado diretamente
-# (e não importado como módulo por outro programa)
+# Inicia o programa quando este arquivo é executado diretamente.
 if __name__ == "__main__":
     main()  # Aqui o programa COMEÇA A RODAR
