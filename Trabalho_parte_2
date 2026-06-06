@@ -1,0 +1,1253 @@
+"""
+==================================================================
+SISTEMA DE REGISTROS DE ALUNOS - CRUD COM SQLITE + TKINTER
+==================================================================
+Disciplina: Desenvolvimento Rápido de Aplicações em Python
+Alunos: Tamiris da Silva Tedesche Cerdeira - matrícula: 202508191831
+        Samuel de Holanda Reis             -            202504275037
+
+Funcionalidades: Cadastrar, Listar, Buscar, Atualizar e Excluir
+Banco de Dados: SQLite (arquivo: sistema_academico.db)
+Interface: Gráfica (Tkinter)
+
+==================================================================
+OBSERVAÇÃO SOBRE A ESCOLHA DO BANCO DE DADOS
+==================================================================
+Para este sistema, decidimos utilizar o SQLite porque ele é mais simples.
+Não precisa instalar servidor, o banco fica num único arquivo (sistema_academico.db)
+e a biblioteca já vem com o Python.
+
+O PostgreSQL oferece recursos como triggers, stored procedures e controle
+de usuários, mas analisando o nosso código, percebemos que não usaríamos
+nada disso. Nosso sistema faz apenas as operações básicas de CRUD e a
+escola é de pequeno porte, com poucos usuários simultâneos.
+
+Por esses motivos, optamos pelo SQLite, que atende todas as necessidades
+do sistema sem adicionar complexidade desnecessária.
+==================================================================
+"""
+
+# ================================================================
+# BIBLIOTECAS
+# ================================================================
+import sqlite3  # Para trabalhar com o banco de dados SQLite
+import tkinter as tk  # Para criar a interface gráfica
+from tkinter import ttk, messagebox, Toplevel  # Componentes adicionais do Tkinter
+from datetime import datetime  # Para exportar estatísticas com data/hora
+
+
+# ================================================================
+# PARTE 1: FUNÇÕES DO BANCO DE DADOS (CONEXÃO E TABELA)
+# ================================================================
+
+# -----------------------------------------------------------------
+# FUNÇÃO: Conectar ao banco de dados
+# -----------------------------------------------------------------
+def conectar():
+    """
+    FUNÇÃO: conectar()
+    OBJETIVO: Abrir a conexão com o banco de dados
+    RETORNA: Um objeto de conexão com o arquivo escola.db
+    """
+    return sqlite3.connect("sistema_academico.db")
+
+
+# -----------------------------------------------------------------
+# FUNÇÃO: Criar tabela de alunos
+# -----------------------------------------------------------------
+def criar_tabela():
+    """
+    FUNÇÃO: criar_tabela()
+    OBJETIVO: Criar a tabela 'alunos' se ela não existir
+    OBSERVAÇÃO: Esta função é chamada apenas uma vez, no início do programa
+
+    ESTRUTURA DA TABELA:
+        - id: Identificador único (automático)
+        - nome: Nome completo do aluno (obrigatório)
+        - matricula: Número de matrícula (único e obrigatório)
+        - curso: Nome do curso (obrigatório)
+        - nota1: Primeira nota do aluno (0 a 10)
+        - nota2: Segunda nota do aluno (0 a 10)
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Comando SQL para criar a tabela
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alunos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            matricula TEXT UNIQUE NOT NULL,
+            curso TEXT NOT NULL,
+            nota1 REAL,
+            nota2 REAL
+        )
+    """)
+    
+    # 3. Salvar as alterações e fechar a conexão
+    conexao.commit()
+    conexao.close()
+
+
+# ================================================================
+# PARTE 2: OPERAÇÕES CRUD (CREATE, READ, UPDATE, DELETE)
+# ================================================================
+
+# -----------------------------------------------------------------
+# CREATE: Cadastrar novo aluno
+# -----------------------------------------------------------------
+def cadastrar_aluno(nome, matricula, curso, nota1, nota2):
+    """
+    FUNÇÃO: cadastrar_aluno()
+    OBJETIVO: Inserir um novo aluno no banco de dados
+    PARÂMETROS: 
+        - nome (string): Nome completo do aluno
+        - matricula (string): Número de matrícula (deve ser único)
+        - curso (string): Nome do curso
+        - nota1 (float): Primeira nota (0 a 10)
+        - nota2 (float): Segunda nota (0 a 10)
+    RETORNA: True (sucesso) ou False (erro, geralmente matrícula duplicada)
+    """
+    try:
+        # 1. Conectar ao banco
+        conexao = conectar()
+        cursor = conexao.cursor()
+        
+        # 2. Executar o INSERT SQL
+        cursor.execute("""
+            INSERT INTO alunos (nome, matricula, curso, nota1, nota2)
+            VALUES (?, ?, ?, ?, ?)
+        """, (nome, matricula, curso, nota1, nota2))
+        
+        # 3. Salvar e fechar
+        conexao.commit()
+        conexao.close()
+        return True  # Cadastro realizado com sucesso
+        
+    except sqlite3.IntegrityError:
+        # Este erro ocorre quando a matrícula já existe
+        return False  # Falha no cadastro
+
+
+# -----------------------------------------------------------------
+# READ: Listar todos os alunos
+# -----------------------------------------------------------------
+def listar_alunos():
+    """
+    FUNÇÃO: listar_alunos()
+    OBJETIVO: Buscar todos os alunos cadastrados
+    RETORNA: Lista de tuplas [(id, nome, matricula, curso, nota1, nota2)]
+    OBSERVAÇÃO: Os alunos são ordenados por ID (ordem de cadastro)
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Executar a consulta SQL (ORDER BY id para ordenar)
+    cursor.execute("""
+        SELECT id, nome, matricula, curso, nota1, nota2
+        FROM alunos
+        ORDER BY id
+    """)
+    
+    # 3. Buscar todos os resultados
+    alunos = cursor.fetchall()
+    
+    # 4. Fechar a conexão
+    conexao.close()
+    return alunos
+
+
+# -----------------------------------------------------------------
+# READ: Buscar aluno por nome ou matrícula
+# -----------------------------------------------------------------
+def buscar_aluno(termo):
+    """
+    FUNÇÃO: buscar_aluno()
+    OBJETIVO: Encontrar alunos pelo nome ou matrícula
+    PARÂMETRO: termo - texto digitado pelo usuário
+    RETORNA: Lista de alunos que correspondem à busca
+    OBSERVAÇÃO: O símbolo % significa "qualquer caractere"
+    Exemplo: %joão% encontra "João", "Joãozinho", "Maria João"
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Executar a busca com LIKE (busca parcial)
+    cursor.execute("""
+        SELECT id, nome, matricula, curso, nota1, nota2
+        FROM alunos
+        WHERE nome LIKE ? OR matricula LIKE ?
+        ORDER BY id
+    """, (f"%{termo}%", f"%{termo}%"))
+    
+    # 3. Buscar os resultados
+    resultados = cursor.fetchall()
+    
+    # 4. Fechar a conexão
+    conexao.close()
+    return resultados
+
+
+# -----------------------------------------------------------------
+# UPDATE: Atualizar dados de um aluno
+# -----------------------------------------------------------------
+def atualizar_aluno(id_aluno, nome, curso, nota1, nota2):
+    """
+    FUNÇÃO: atualizar_aluno()
+    OBJETIVO: Modificar os dados de um aluno existente
+    PARÂMETROS: id_aluno (identificador), nome, curso, nota1, nota2
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Executar o UPDATE SQL
+    cursor.execute("""
+        UPDATE alunos
+        SET nome = ?, curso = ?, nota1 = ?, nota2 = ?
+        WHERE id = ?
+    """, (nome, curso, nota1, nota2, id_aluno))
+    
+    # 3. Salvar e fechar
+    conexao.commit()
+    conexao.close()
+
+
+# -----------------------------------------------------------------
+# DELETE: Excluir um aluno
+# -----------------------------------------------------------------
+def excluir_aluno(id_aluno):
+    """
+    FUNÇÃO: excluir_aluno()
+    OBJETIVO: Remover um aluno do banco de dados
+    PARÂMETRO: id_aluno (identificador do aluno a ser removido)
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Executar o DELETE SQL
+    cursor.execute("DELETE FROM alunos WHERE id = ?", (id_aluno,))
+    
+    # 3. Salvar e fechar
+    conexao.commit()
+    conexao.close()
+
+
+# -----------------------------------------------------------------
+# FUNÇÃO AUXILIAR: Buscar aluno por ID
+# -----------------------------------------------------------------
+def buscar_aluno_por_id(id_aluno):
+    """
+    FUNÇÃO: buscar_aluno_por_id()
+    OBJETIVO: Buscar um aluno específico pelo seu ID
+    PARÂMETRO: id_aluno (identificador do aluno)
+    RETORNA: Tupla com os dados do aluno ou None se não encontrar
+    OBSERVAÇÃO: Esta função é usada principalmente na atualização,
+                para carregar os dados atuais do aluno selecionado
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Buscar o aluno pelo ID (WHERE id = ?)
+    cursor.execute("""
+        SELECT id, nome, matricula, curso, nota1, nota2 
+        FROM alunos 
+        WHERE id = ?
+    """, (id_aluno,))
+    
+    # 3. Retornar apenas um registro (ou None)
+    aluno = cursor.fetchone()
+    
+    # 4. Fechar a conexão
+    conexao.close()
+    return aluno
+
+
+# -----------------------------------------------------------------
+# FUNÇÃO AUXILIAR: Verificar se matrícula já existe
+# -----------------------------------------------------------------
+def verificar_matricula_existe(matricula, id_excluir=None):
+    """
+    FUNÇÃO: verificar_matricula_existe()
+    OBJETIVO: Verificar se uma matrícula já está cadastrada no banco
+    PARÂMETROS: 
+        - matricula (string): a matrícula a ser verificada
+        - id_excluir (int, opcional): ID do aluno a ser ignorado na verificação
+                                      (usado na atualização para não conflitar com o próprio aluno)
+    RETORNA: True se a matrícula já existe, False se está disponível
+    
+    EXEMPLO DE USO:
+        No cadastro: verificar_matricula_existe("123456") -> True/False
+        Na atualização: verificar_matricula_existe("123456", id_aluno=5) 
+                       -> ignora o aluno de ID 5 na verificação
+    """
+    # 1. Conectar ao banco
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    # 2. Verificar se a matrícula existe (com ou sem exclusão)
+    if id_excluir:
+        # Na atualização: verifica se a matrícula existe em outro aluno (ignora o próprio)
+        cursor.execute("""
+            SELECT id FROM alunos 
+            WHERE matricula = ? AND id != ?
+        """, (matricula, id_excluir))
+    else:
+        # No cadastro: verifica se a matrícula existe em qualquer aluno
+        cursor.execute("""
+            SELECT id FROM alunos 
+            WHERE matricula = ?
+        """, (matricula,))
+    
+    # 3. Se encontrou algum registro, retorna True
+    existe = cursor.fetchone()
+    
+    # 4. Fechar a conexão
+    conexao.close()
+    return existe is not None
+
+
+# ================================================================
+# PARTE 3: CLASSE PRINCIPAL DA INTERFACE GRÁFICA
+# ================================================================
+
+class SistemaAlunos:
+    """
+    CLASSE: SistemaAlunos
+    OBJETIVO: Gerenciar toda a interface gráfica do sistema
+    """
+    
+    # -----------------------------------------------------------------
+    # Construtor da classe
+    # -----------------------------------------------------------------
+    def __init__(self, root):
+        """
+        FUNÇÃO: __init__()
+        OBJETIVO: Configurar a janela principal e criar todos os elementos da interface
+        PARÂMETRO: root - janela principal do Tkinter
+        """
+        self.root = root
+        self.root.title("📚 Sistema de Registro de Alunos")
+        self.root.geometry("1200x700")
+        self.root.configure(bg='#f0f0f0')
+        
+        # Dicionário para armazenar os checkboxes
+        self.checkboxes = {}
+        
+        # Criar os componentes da interface
+        self.criar_painel_estatisticas()
+        self.criar_botoes()
+        self.criar_tabela()
+        self.criar_status_bar()
+        
+        # Carregar os dados do banco na tabela
+        self.atualizar_tabela()
+    
+    # -----------------------------------------------------------------
+    # Criar painel de estatísticas
+    # -----------------------------------------------------------------
+    def criar_painel_estatisticas(self):
+        """
+        FUNÇÃO: criar_painel_estatisticas()
+        OBJETIVO: Criar o painel superior com estatísticas em tempo real
+        """
+        # Frame (container) para as estatísticas
+        frame_stats = tk.Frame(self.root, bg='#e8e8e8', height=50, relief=tk.RAISED, bd=1)
+        frame_stats.pack(fill=tk.X, padx=10, pady=10)
+        frame_stats.pack_propagate(False)
+        
+        # Label para mostrar o total de alunos
+        self.label_total = tk.Label(
+            frame_stats, text="📊 Total de Alunos: 0",
+            font=('Arial', 11, 'bold'), bg='#e8e8e8', fg='#2c3e50'
+        )
+        self.label_total.pack(side=tk.LEFT, padx=30, pady=12)
+        
+        # Label para mostrar a quantidade de aprovados
+        self.label_aprovados = tk.Label(
+            frame_stats, text="✅ Aprovados: 0",
+            font=('Arial', 11, 'bold'), bg='#e8e8e8', fg='#27ae60'
+        )
+        self.label_aprovados.pack(side=tk.LEFT, padx=30, pady=12)
+        
+        # Label para mostrar a quantidade de reprovados
+        self.label_reprovados = tk.Label(
+            frame_stats, text="❌ Reprovados: 0",
+            font=('Arial', 11, 'bold'), bg='#e8e8e8', fg='#e74c3c'
+        )
+        self.label_reprovados.pack(side=tk.LEFT, padx=30, pady=12)
+    
+    # -----------------------------------------------------------------
+    # Criar botões das operações CRUD
+    # -----------------------------------------------------------------
+    def criar_botoes(self):
+        """
+        FUNÇÃO: criar_botoes()
+        OBJETIVO: Criar os botões para as operações CRUD
+        """
+        frame_botoes = tk.Frame(self.root, bg='#f0f0f0', pady=10)
+        frame_botoes.pack(fill=tk.X, padx=10)
+        
+        botoes = [
+            ("➕ CADASTRAR", self.abrir_cadastro, '#27ae60'),
+            ("🔍 BUSCAR", self.abrir_busca, '#3498db'),
+            ("✏️ ATUALIZAR", self.abrir_atualizacao, '#f39c12'),
+            ("🗑️ EXCLUIR", self.excluir_selecionados, '#e74c3c'),
+            ("📊 ESTATISTICAS", self.mostrar_estatisticas, '#8e44ad'),
+        ]
+        
+        for texto, comando, cor in botoes:
+            btn = tk.Button(
+                frame_botoes, text=texto, command=comando,
+                bg=cor, fg='white', font=('Arial', 10, 'bold'),
+                width=14, height=1, cursor='hand2', relief=tk.RAISED, bd=1
+            )
+            btn.pack(side=tk.LEFT, padx=5, pady=5)
+    
+    # -----------------------------------------------------------------
+    # Criar tabela de exibição dos alunos
+    # -----------------------------------------------------------------
+    def criar_tabela(self):
+        """
+        FUNÇÃO: criar_tabela()
+        OBJETIVO: Criar a tabela (Treeview) para exibir os alunos com cores
+        COLUNAS: Seleção, ID, Nome, Matrícula, Curso, Nota 1, Nota 2, Média, Situação
+        """
+        # Frame com borda e título
+        frame_tabela = tk.LabelFrame(
+            self.root, text="📋 Lista de Alunos Cadastrados", 
+            font=('Arial', 10, 'bold'), bg='#f0f0f0', fg='#2c3e50',
+            padx=10, pady=10
+        )
+        frame_tabela.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Scrollbars para rolar a tabela
+        scroll_y = ttk.Scrollbar(frame_tabela)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        scroll_x = ttk.Scrollbar(frame_tabela, orient=tk.HORIZONTAL)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Treeview (tabela) com 9 colunas
+        self.tree = ttk.Treeview(
+            frame_tabela,
+            columns=('Seleção', 'ID', 'Nome', 'Matrícula', 'Curso', 'Nota 1', 'Nota 2', 'Média', 'Situação'),
+            show='headings',
+            yscrollcommand=scroll_y.set,
+            xscrollcommand=scroll_x.set,
+            height=18
+        )
+        
+        # Conectar as scrollbars à tabela
+        scroll_y.config(command=self.tree.yview)
+        scroll_x.config(command=self.tree.xview)
+        
+        # Configurar cada coluna (largura e alinhamento)
+        colunas = {
+            'Seleção': {'width': 60, 'anchor': 'center'},
+            'ID': {'width': 50, 'anchor': 'center'},
+            'Nome': {'width': 220, 'anchor': 'w'},
+            'Matrícula': {'width': 100, 'anchor': 'center'},
+            'Curso': {'width': 150, 'anchor': 'w'},
+            'Nota 1': {'width': 80, 'anchor': 'center'},
+            'Nota 2': {'width': 80, 'anchor': 'center'},
+            'Média': {'width': 80, 'anchor': 'center'},
+            'Situação': {'width': 110, 'anchor': 'center'}
+        }
+        
+        # Aplicar as configurações das colunas
+        for col, config in colunas.items():
+            self.tree.heading(col, text=col)
+            self.tree.column(col, **config)
+        
+        self.tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Evento: duplo clique na tabela abre a janela de atualização
+        self.tree.bind('<Double-Button-1>', lambda e: self.abrir_atualizacao())
+        
+        # Evento: clique na coluna de seleção
+        self.tree.bind('<Button-1>', self.on_tree_click)
+    
+    # -----------------------------------------------------------------
+    # Evento de clique na tabela
+    # -----------------------------------------------------------------
+    def on_tree_click(self, event):
+        """Gerencia o clique na coluna de seleção da tabela"""
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            if column == '#1':  # Coluna de Seleção
+                item = self.tree.identify_row(event.y)
+                if item:
+                    if item in self.checkboxes and self.checkboxes[item].get():
+                        # Desmarcar
+                        self.checkboxes[item].set(False)
+                        self.tree.set(item, 'Seleção', '□')
+                        self.tree.item(item, tags=('',))
+                    else:
+                        # Marcar
+                        if item not in self.checkboxes:
+                            self.checkboxes[item] = tk.BooleanVar(value=True)
+                        else:
+                            self.checkboxes[item].set(True)
+                        self.tree.set(item, 'Seleção', '■')
+                        self.tree.item(item, tags=('selected',))
+                    
+                    self.atualizar_label_selecionados()
+    
+    # -----------------------------------------------------------------
+    # Criar barra de status
+    # -----------------------------------------------------------------
+    def criar_status_bar(self):
+        """Cria a barra de status na parte inferior"""
+        frame_status = tk.Frame(self.root, bg='#e8e8e8', height=35)
+        frame_status.pack(fill=tk.X, side=tk.BOTTOM)
+        frame_status.pack_propagate(False)
+        
+        self.label_selecionados = tk.Label(
+            frame_status,
+            text="📌 Nenhum aluno selecionado",
+            font=('Arial', 9),
+            bg='#e8e8e8',
+            fg='#2c3e50',
+            anchor='w',
+            padx=10
+        )
+        self.label_selecionados.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.label_total_status = tk.Label(
+            frame_status,
+            text="",
+            font=('Arial', 9),
+            bg='#e8e8e8',
+            fg='#7f8c8d',
+            anchor='e',
+            padx=10
+        )
+        self.label_total_status.pack(side=tk.RIGHT)
+    
+    # -----------------------------------------------------------------
+    # Atualizar label de selecionados
+    # -----------------------------------------------------------------
+    def atualizar_label_selecionados(self):
+        """Atualiza o label com a quantidade de alunos selecionados"""
+        selecionados = [item for item, var in self.checkboxes.items() if var.get()]
+        qtd = len(selecionados)
+        
+        if qtd == 0:
+            self.label_selecionados.config(text="📌 Nenhum aluno selecionado")
+        elif qtd == 1:
+            self.label_selecionados.config(text=f"📌 1 aluno selecionado")
+        else:
+            self.label_selecionados.config(text=f"📌 {qtd} alunos selecionados")
+        
+        self.label_total_status.config(text=f"Total na tabela: {len(self.tree.get_children())}")
+    
+    # -----------------------------------------------------------------
+    # Limpar seleções
+    # -----------------------------------------------------------------
+    def limpar_selecoes(self):
+        """Limpa todas as seleções de checkbox"""
+        for item, var in self.checkboxes.items():
+            var.set(False)
+            self.tree.set(item, 'Seleção', '□')
+            self.tree.item(item, tags=('',))
+        self.atualizar_label_selecionados()
+    
+    # -----------------------------------------------------------------
+    # Excluir apenas os alunos selecionados
+    # -----------------------------------------------------------------
+    def excluir_selecionados(self):
+        """
+        FUNÇÃO: excluir_selecionados()
+        OBJETIVO: Excluir APENAS os alunos que estão com checkbox marcado
+        """
+        # Pegar apenas os alunos selecionados
+        selecionados = []
+        for item, var in self.checkboxes.items():
+            if var.get():
+                valores = self.tree.item(item, 'values')
+                id_aluno = valores[1]
+                nome_aluno = valores[2]
+                selecionados.append((id_aluno, nome_aluno))
+        
+        # Verificar se há alunos selecionados
+        if not selecionados:
+            messagebox.showwarning(
+                "⚠️ Nenhum aluno selecionado",
+                "Para excluir:\n\n"
+                "1. Clique na coluna 'Seleção' (primeira coluna) para marcar os alunos (■)\n"
+                "2. Depois clique em 'EXCLUIR'"
+            )
+            return
+        
+        # Mostrar quantos serão excluídos e pedir confirmação
+        qtd = len(selecionados)
+        lista_nomes = "\n".join([f"• {nome}" for id, nome in selecionados[:5]])
+        if qtd > 5:
+            lista_nomes += f"\n... e mais {qtd - 5} outro(s)"
+        
+        resposta = messagebox.askyesno(
+            "🗑️ Confirmar Exclusão",
+            f"⚠️ ATENÇÃO!\n\n"
+            f"Você selecionou {qtd} aluno(s) para excluir:\n\n{lista_nomes}\n\n"
+            f"Esta ação é IRREVERSÍVEL!\n\nDeseja continuar?",
+            icon='warning'
+        )
+        
+        if not resposta:
+            return
+        
+        # Executar a exclusão
+        excluidos = 0
+        for id_aluno, nome_aluno in selecionados:
+            try:
+                excluir_aluno(int(id_aluno))
+                excluidos += 1
+            except:
+                pass
+        
+        # Limpar seleções e atualizar
+        self.limpar_selecoes()
+        self.atualizar_tabela()
+        
+        # Mensagem de resultado
+        messagebox.showinfo(
+            "✅ Exclusão Concluída",
+            f"{excluidos} aluno(s) foram excluído(s) com sucesso!"
+        )
+    
+    # -----------------------------------------------------------------
+    # Atualizar tabela com dados do banco
+    # -----------------------------------------------------------------
+    def atualizar_tabela(self):
+        """
+        FUNÇÃO: atualizar_tabela()
+        OBJETIVO: Buscar os alunos no banco e exibir na tabela com cores
+        CORES: Verde para aprovados (média >= 6), Vermelho para reprovados
+        OBSERVAÇÃO: Se apenas uma nota existir, a média é calculada como nota/2
+        """
+        # Limpar a tabela atual
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        self.checkboxes.clear()
+        
+        alunos = listar_alunos()
+        aprovados = 0
+        
+        for aluno in alunos:
+            id_aluno, nome, matricula, curso, nota1, nota2 = aluno
+            
+            # LÓGICA PARA CÁLCULO DA MÉDIA
+            # Caso 1: Duas notas disponíveis
+            if nota1 is not None and nota2 is not None:
+                media = (nota1 + nota2) / 2
+                situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+                if media >= 6:
+                    aprovados += 1
+            
+            # Caso 2: Apenas nota 1 disponível (divide por 2)
+            elif nota1 is not None and nota2 is None:
+                media = nota1 / 2
+                situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+                if media >= 6:
+                    aprovados += 1
+            
+            # Caso 3: Apenas nota 2 disponível (divide por 2)
+            elif nota1 is None and nota2 is not None:
+                media = nota2 / 2
+                situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+                if media >= 6:
+                    aprovados += 1
+            
+            # Caso 4: Nenhuma nota disponível
+            else:
+                media = 0
+                situacao = "SEM NOTAS ⚠️"
+            
+            # Definir a cor da linha baseada na média
+            tag = 'aprovado' if media >= 6 else 'reprovado'
+            
+            var_check = tk.BooleanVar(value=False)
+            
+            item = self.tree.insert('', tk.END,
+                           values=("□", id_aluno, nome, matricula, curso,
+                                  f"{nota1:.1f}" if nota1 else "-",
+                                  f"{nota2:.1f}" if nota2 else "-",
+                                  f"{media:.1f}", situacao),
+                           tags=(tag,))
+            
+            self.checkboxes[item] = var_check
+            
+            def atualizar_simbolo(i, v):
+                if v.get():
+                    self.tree.set(i, 'Seleção', '■')
+                else:
+                    self.tree.set(i, 'Seleção', '□')
+            
+            var_check.trace_add('write', lambda *args, i=item, v=var_check: atualizar_simbolo(i, v))
+        
+        # Configurar as cores das linhas
+        self.tree.tag_configure('aprovado', background='#d4edda', foreground='#155724')
+        self.tree.tag_configure('reprovado', background='#f8d7da', foreground='#721c24')
+        self.tree.tag_configure('selected', background='#bdc3c7', foreground='#2c3e50')
+        
+        total = len(alunos)
+        reprovados = 0
+        for aluno in alunos:
+            nota1, nota2 = aluno[4], aluno[5]
+            if nota1 is not None and nota2 is not None:
+                media = (nota1 + nota2) / 2
+                if media < 6:
+                    reprovados += 1
+            elif nota1 is not None and nota2 is None:
+                media = nota1 / 2
+                if media < 6:
+                    reprovados += 1
+            elif nota1 is None and nota2 is not None:
+                media = nota2 / 2
+                if media < 6:
+                    reprovados += 1
+        
+        self.label_total.config(text=f"📊 Total de Alunos: {total}")
+        self.label_aprovados.config(text=f"✅ Aprovados: {aprovados}")
+        self.label_reprovados.config(text=f"❌ Reprovados: {reprovados}")
+        
+        self.atualizar_label_selecionados()
+    
+    # -----------------------------------------------------------------
+    # Mostrar estatísticas detalhadas 
+    # -----------------------------------------------------------------
+    def mostrar_estatisticas(self):
+        """
+        FUNÇÃO: mostrar_estatisticas()
+        OBJETIVO: Exibir estatísticas detalhadas dos alunos por curso
+        """
+        # Buscar todos os alunos do banco
+        alunos = listar_alunos()
+        
+        if not alunos:
+            messagebox.showinfo("📊 Estatísticas", "Nenhum aluno cadastrado ainda!")
+            return
+        
+        # Dicionário para armazenar estatísticas por curso
+        estatisticas = {}
+        
+        # Processar cada aluno
+        for aluno in alunos:
+            id_aluno, nome, matricula, curso, nota1, nota2 = aluno
+            
+            # Calcular média
+            if nota1 is not None and nota2 is not None:
+                media = (nota1 + nota2) / 2
+                situacao = "APROVADO" if media >= 6 else "REPROVADO"
+            elif nota1 is not None and nota2 is None:
+                media = nota1 / 2
+                situacao = "APROVADO" if media >= 6 else "REPROVADO"
+            elif nota1 is None and nota2 is not None:
+                media = nota2 / 2
+                situacao = "APROVADO" if media >= 6 else "REPROVADO"
+            else:
+                media = 0
+                situacao = "REPROVADO"
+            
+            # Inicializar estatísticas do curso se não existir
+            if curso not in estatisticas:
+                estatisticas[curso] = {
+                    'total': 0, 
+                    'aprovados': 0, 
+                    'reprovados': 0
+                }
+            
+            # Atualizar estatísticas
+            estatisticas[curso]['total'] += 1
+            if situacao == "APROVADO":
+                estatisticas[curso]['aprovados'] += 1
+            else:
+                estatisticas[curso]['reprovados'] += 1
+        
+        # Calcular totais gerais
+        total_geral = 0
+        aprovados_geral = 0
+        reprovados_geral = 0
+        
+        for curso, stats in estatisticas.items():
+            total_geral += stats['total']
+            aprovados_geral += stats['aprovados']
+            reprovados_geral += stats['reprovados']
+        
+        # Calcular taxas gerais
+        taxa_aprovacao_geral = (aprovados_geral / total_geral * 100) if total_geral > 0 else 0
+        taxa_reprovacao_geral = (reprovados_geral / total_geral * 100) if total_geral > 0 else 0
+        
+        # Construir o texto das estatísticas 
+        texto = "=" * 80 + "\n"
+        texto += "                   ESTATISTICAS DETALHADAS DA TURMA\n"
+        texto += "=" * 80 + "\n\n"
+        
+        # Tabela por curso
+        texto += "📋 POR CURSO:\n"
+        texto += "-" * 80 + "\n"
+        texto += f"{'Curso':<30} {'Total':>6} {'Aprovados':>10} {'Reprovados':>10} {'Aprovação':>10} {'Reprovação':>10}\n"
+        texto += "-" * 80 + "\n"
+        
+        for curso, stats in sorted(estatisticas.items()):
+            total = stats['total']
+            aprovados = stats['aprovados']
+            reprovados = stats['reprovados']
+            taxa_aprovacao = (aprovados / total * 100) if total > 0 else 0
+            taxa_reprovacao = (reprovados / total * 100) if total > 0 else 0
+            
+            texto += f"{curso:<30} {total:>6} {aprovados:>10} {reprovados:>10} {taxa_aprovacao:>9.1f}% {taxa_reprovacao:>9.1f}%\n"
+        
+        texto += "-" * 80 + "\n"
+        
+        # Totais gerais
+        texto += f"\n 📊 TOTAIS GERAIS:\n"
+        texto += "-" * 80 + "\n"
+        texto += f"{'Total de Alunos':<30} {total_geral:>6}\n"
+        texto += f"{'Total de Aprovados':<30} {aprovados_geral:>6}\n"
+        texto += f"{'Total de Reprovados':<30} {reprovados_geral:>6}\n"
+        texto += f"{'Taxa de Aprovação':<30} {taxa_aprovacao_geral:>6.1f}%\n"
+        texto += f"{'Taxa de Reprovação':<30} {taxa_reprovacao_geral:>6.1f}%\n"
+        texto += "-" * 80 + "\n"
+        
+        # Resumo visual com barras
+        texto += "\n 📈 RESUMO VISUAL DA TURMA:\n"
+        texto += "-" * 80 + "\n"
+        
+        comprimento_barra = 40
+        aprovados_barra = int((aprovados_geral / total_geral) * comprimento_barra) if total_geral > 0 else 0
+        reprovados_barra = comprimento_barra - aprovados_barra
+        
+        texto += f"Aprovados:   {'█' * aprovados_barra}{'░' * reprovados_barra} {taxa_aprovacao_geral:.1f}%\n"
+        texto += f"Reprovados:  {'█' * reprovados_barra}{'░' * aprovados_barra} {taxa_reprovacao_geral:.1f}%\n"
+        texto += "-" * 80 + "\n"
+        
+        # Informação sobre os cursos
+        texto += f"\n 🏫 DISTRIBUICAO POR CURSO:\n"
+        texto += "-" * 80 + "\n"
+        
+        for curso, stats in sorted(estatisticas.items()):
+            total = stats['total']
+            percentual = (total / total_geral * 100) if total_geral > 0 else 0
+            barras = int((total / total_geral) * comprimento_barra) if total_geral > 0 else 0
+            texto += f"{curso[:25]:<25} {total:>3} alunos ({percentual:>5.1f}%) {'█' * barras}\n"
+        
+        texto += "=" * 80 + "\n"
+        
+        # Criar janela para exibir as estatísticas
+        janela = Toplevel(self.root)
+        janela.title(" 📊 Estatísticas da Turma")
+        janela.geometry("750x650")
+        janela.configure(bg='#f0f0f0')
+        
+        # Centralizar a janela
+        janela.update_idletasks()
+        x = (janela.winfo_screenwidth() // 2) - (750 // 2)
+        y = (janela.winfo_screenheight() // 2) - (650 // 2)
+        janela.geometry(f'750x650+{x}+{y}')
+        
+        # Frame para o texto
+        frame_texto = tk.Frame(janela, bg='#f0f0f0', padx=20, pady=20)
+        frame_texto.pack(fill=tk.BOTH, expand=True)
+        
+        # Widget de texto com scroll
+        text_widget = tk.Text(
+            frame_texto,
+            font=('Courier New', 10),
+            bg='white',
+            fg='#2c3e50',
+            wrap=tk.NONE,
+            padx=15,
+            pady=15
+        )
+        text_widget.insert('1.0', texto)
+        text_widget.config(state='disabled')
+        
+        # Scrollbars
+        scroll_y = tk.Scrollbar(frame_texto, orient=tk.VERTICAL, command=text_widget.yview)
+        scroll_x = tk.Scrollbar(frame_texto, orient=tk.HORIZONTAL, command=text_widget.xview)
+        text_widget.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+        
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+        text_widget.pack(fill=tk.BOTH, expand=True)
+        
+        # Frame para os botões
+        frame_botoes = tk.Frame(janela, bg='#f0f0f0', pady=15)
+        frame_botoes.pack(fill=tk.X)
+        
+        # Botão exportar
+        def exportar_estatisticas():
+            nome_arquivo = f"estatisticas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(nome_arquivo, 'w', encoding='utf-8') as f:
+                f.write(texto)
+            messagebox.showinfo("Exportar", f"✅ Estatísticas exportadas para:\n{nome_arquivo}")
+        
+        tk.Button(
+            frame_botoes, text="EXPORTAR", command=exportar_estatisticas,
+            bg='#27ae60', fg='white', font=('Arial', 10, 'bold'),
+            padx=20, pady=5, cursor='hand2'
+        ).pack()
+
+    # -----------------------------------------------------------------
+    # Abrir janela de cadastro
+    # -----------------------------------------------------------------
+    def abrir_cadastro(self):
+        """
+        FUNÇÃO: abrir_cadastro()
+        OBJETIVO: Abrir uma janela para cadastrar um novo aluno
+        """
+        # Criar nova janela (Toplevel)
+        janela = Toplevel(self.root)
+        janela.title("Cadastrar Aluno")
+        janela.geometry("500x480")
+        janela.configure(bg='#f0f0f0')
+        janela.resizable(False, False)
+        
+        # Centralizar a janela na tela
+        janela.update_idletasks()
+        x = (janela.winfo_screenwidth() // 2) - (500 // 2)
+        y = (janela.winfo_screenheight() // 2) - (480 // 2)
+        janela.geometry(f'500x480+{x}+{y}')
+        
+        # Título da janela
+        tk.Label(
+            janela, text="CADASTRO DE ALUNO", 
+            font=('Arial', 14, 'bold'), bg='#27ae60', fg='white', pady=12
+        ).pack(fill=tk.X)
+        
+        # Frame para organizar os campos do formulário
+        frame_form = tk.Frame(janela, bg='#f0f0f0', padx=30, pady=25)
+        frame_form.pack(fill=tk.BOTH, expand=True)
+        
+        # Criar os campos do formulário
+        # Campo: Nome
+        tk.Label(frame_form, text="Nome completo:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=0, column=0, sticky='w', pady=8)
+        entry_nome = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_nome.grid(row=0, column=1, pady=8, padx=10)
+        
+        # Campo: Matrícula
+        tk.Label(frame_form, text="Matrícula:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=1, column=0, sticky='w', pady=8)
+        entry_matricula = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_matricula.grid(row=1, column=1, pady=8, padx=10)
+        
+        # Campo: Curso
+        tk.Label(frame_form, text="Curso:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=2, column=0, sticky='w', pady=8)
+        entry_curso = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_curso.grid(row=2, column=1, pady=8, padx=10)
+        
+        # Campo: Nota 1
+        tk.Label(frame_form, text="Nota 1 (0-10):", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=3, column=0, sticky='w', pady=8)
+        entry_nota1 = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_nota1.insert(0, "0")  # Valor padrão
+        entry_nota1.grid(row=3, column=1, pady=8, padx=10)
+        
+        # Campo: Nota 2
+        tk.Label(frame_form, text="Nota 2 (0-10):", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=4, column=0, sticky='w', pady=8)
+        entry_nota2 = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_nota2.insert(0, "0")  # Valor padrão
+        entry_nota2.grid(row=4, column=1, pady=8, padx=10)
+
+        # -----------------------------------------------------------------
+        # FUNÇÃO INTERNA: Salvar o cadastro
+        # -----------------------------------------------------------------
+        def salvar():
+            """
+            FUNÇÃO INTERNA: salvar()
+            OBJETIVO: Validar os dados e salvar o novo aluno no banco
+            """
+            # Coletar os dados dos campos
+            nome = entry_nome.get().strip()
+            matricula = entry_matricula.get().strip()
+            curso = entry_curso.get().strip()
+            
+            # Validar campos obrigatórios
+            if not nome or not matricula or not curso:
+                messagebox.showerror("Erro", "Preencha todos os campos!")
+                return
+            
+            # Validar se a matrícula já existe
+            if verificar_matricula_existe(matricula):
+                messagebox.showerror("Erro", f"Matrícula '{matricula}' já existe!")
+                return
+            
+            # Validar notas
+            try:
+                nota1 = float(entry_nota1.get())
+                nota2 = float(entry_nota2.get())
+                if not (0 <= nota1 <= 10 and 0 <= nota2 <= 10):
+                    messagebox.showerror("Erro", "Notas devem estar entre 0 e 10!")
+                    return
+            except ValueError:
+                messagebox.showerror("Erro", "Notas devem ser números!")
+                return
+            
+            # Cadastrar no banco de dados
+            if cadastrar_aluno(nome, matricula, curso, nota1, nota2):
+                messagebox.showinfo("Sucesso", "✅ Aluno cadastrado com sucesso!")
+                janela.destroy()  # Fechar a janela
+                self.atualizar_tabela()  # Atualizar a tabela principal
+            else:
+                messagebox.showerror("Erro", "Erro ao cadastrar aluno!")
+        
+        # Botões SALVAR e CANCELAR
+        frame_botoes = tk.Frame(frame_form, bg='#f0f0f0')
+        frame_botoes.grid(row=5, column=0, columnspan=2, pady=25)
+        
+        tk.Button(frame_botoes, text="SALVAR", command=salvar, 
+                 bg='#27ae60', fg='white', font=('Arial', 10, 'bold'), 
+                 padx=25, pady=8, cursor='hand2').pack(side=tk.LEFT, padx=10)
+        
+        tk.Button(frame_botoes, text="CANCELAR", command=janela.destroy, 
+                 bg='#95a5a6', fg='white', font=('Arial', 10, 'bold'), 
+                 padx=25, pady=8, cursor='hand2').pack(side=tk.LEFT, padx=10)
+    
+    # -----------------------------------------------------------------
+    # Abrir janela de busca
+    # -----------------------------------------------------------------
+    def abrir_busca(self):
+        """
+        FUNÇÃO: abrir_busca()
+        OBJETIVO: Abrir uma janela para buscar alunos por nome ou matrícula
+        """
+        janela = Toplevel(self.root)
+        janela.title("Buscar Aluno")
+        janela.geometry("800x500")
+        janela.configure(bg='#f0f0f0')
+        
+        # Frame superior com o campo de busca
+        frame_busca = tk.Frame(janela, bg='#f0f0f0', pady=15)
+        frame_busca.pack(fill=tk.X, padx=20)
+        
+        tk.Label(frame_busca, text="Pesquisar:", font=('Arial', 11, 'bold'), 
+                bg='#f0f0f0').pack(side=tk.LEFT, padx=10)
+        
+        entry_busca = tk.Entry(frame_busca, font=('Arial', 11), width=40)
+        entry_busca.pack(side=tk.LEFT, padx=10)
+        
+        # Frame para exibir os resultados
+        frame_resultados = tk.Frame(janela, bg='#f0f0f0')
+        frame_resultados.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Scrollbar para a tabela de resultados
+        scroll_y = ttk.Scrollbar(frame_resultados)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Tabela de resultados
+        tree_busca = ttk.Treeview(frame_resultados, 
+                                  columns=('ID', 'Nome', 'Matrícula', 'Curso', 'Nota 1', 'Nota 2', 'Média', 'Situação'), 
+                                  show='headings', 
+                                  yscrollcommand=scroll_y.set, 
+                                  height=15)
+        scroll_y.config(command=tree_busca.yview)
+        
+        # Configurar colunas da tabela de busca
+        colunas_busca = ['ID', 'Nome', 'Matrícula', 'Curso', 'Nota 1', 'Nota 2', 'Média', 'Situação']
+        for col in colunas_busca:
+            tree_busca.heading(col, text=col)
+            tree_busca.column(col, width=100)
+        
+        tree_busca.pack(fill=tk.BOTH, expand=True)
+
+        # -----------------------------------------------------------------
+        # FUNÇÃO INTERNA: Realizar a busca
+        # -----------------------------------------------------------------
+        def pesquisar():
+            """
+            FUNÇÃO INTERNA: pesquisar()
+            OBJETIVO: Realizar a busca no banco de dados e exibir os resultados
+            """
+            # Limpar resultados anteriores
+            for item in tree_busca.get_children():
+                tree_busca.delete(item)
+            
+            termo = entry_busca.get().strip()
+            if not termo:
+                messagebox.showwarning("Aviso", "Digite um termo para buscar!")
+                return
+            
+            # Buscar no banco de dados
+            resultados = buscar_aluno(termo)
+            
+            if not resultados:
+                messagebox.showinfo("Info", "Nenhum aluno encontrado!")
+                return
+            
+            # Exibir os resultados na tabela
+            for aluno in resultados:
+                id_aluno, nome, matricula, curso, nota1, nota2 = aluno
+                if nota1 is not None and nota2 is not None:
+                    media = (nota1 + nota2) / 2
+                    situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+                elif nota1 is not None and nota2 is None:
+                    media = nota1 / 2
+                    situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+                elif nota1 is None and nota2 is not None:
+                    media = nota2 / 2
+                    situacao = "APROVADO ✅" if media >= 6 else "REPROVADO ❌"
+                else:
+                    media = 0
+                    situacao = "SEM NOTAS ⚠️"
+                
+                tree_busca.insert('', tk.END, values=(
+                    id_aluno, nome, matricula, curso, 
+                    f"{nota1:.1f}" if nota1 else "-", 
+                    f"{nota2:.1f}" if nota2 else "-",
+                    f"{media:.1f}", situacao
+                ))
+        
+        # Botão BUSCAR
+        tk.Button(frame_busca, text="BUSCAR", command=pesquisar, 
+                 bg='#3498db', fg='white', font=('Arial', 10, 'bold'), 
+                 padx=20, pady=5, cursor='hand2').pack(side=tk.LEFT, padx=10)
+        
+        # Permitir buscar pressionando Enter
+        entry_busca.bind('<Return>', lambda e: pesquisar())
+
+    # -----------------------------------------------------------------
+    # Abrir janela de atualização
+    # -----------------------------------------------------------------    
+    def abrir_atualizacao(self):
+        """
+        FUNÇÃO: abrir_atualizacao()
+        OBJETIVO: Abrir uma janela para atualizar os dados de um aluno selecionado
+        """
+        # Verificar se algum aluno está selecionado na tabela
+        selecionado = self.tree.selection()
+        if not selecionado:
+            messagebox.showwarning("Aviso", "Selecione um aluno na tabela!")
+            return
+        
+        # Pegar o ID do aluno selecionado
+        item = self.tree.item(selecionado[0])
+        id_aluno = item['values'][1]
+        
+        # Buscar os dados completos do aluno no banco
+        aluno = buscar_aluno_por_id(id_aluno)
+        
+        if not aluno:
+            messagebox.showerror("Erro", "Aluno não encontrado!")
+            return
+        
+        id_aluno, nome, matricula, curso, nota1, nota2 = aluno
+        
+        # Criar janela de atualização
+        janela = Toplevel(self.root)
+        janela.title("Atualizar Aluno")
+        janela.geometry("500x430")
+        janela.configure(bg='#f0f0f0')
+        janela.resizable(False, False)
+        
+        # Título da janela
+        tk.Label(janela, text="ATUALIZAR DADOS", font=('Arial', 14, 'bold'), 
+                bg='#f39c12', fg='white', pady=12).pack(fill=tk.X)
+        
+        frame_form = tk.Frame(janela, bg='#f0f0f0', padx=30, pady=25)
+        frame_form.pack(fill=tk.BOTH, expand=True)
+        
+        # Mostrar a matrícula (não editável)
+        tk.Label(frame_form, text=f"Matrícula: {matricula}", font=('Arial', 9, 'italic'), 
+                bg='#f0f0f0', fg='#7f8c8d').grid(row=0, column=0, columnspan=2, sticky='w', pady=5)
+        
+        # Campo: Nome (editável)
+        tk.Label(frame_form, text="Nome:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=1, column=0, sticky='w', pady=8)
+        entry_nome = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_nome.insert(0, nome)
+        entry_nome.grid(row=1, column=1, pady=8, padx=10)
+        
+        # Campo: Curso (editável)
+        tk.Label(frame_form, text="Curso:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=2, column=0, sticky='w', pady=8)
+        entry_curso = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_curso.insert(0, curso)
+        entry_curso.grid(row=2, column=1, pady=8, padx=10)
+        
+        # Campo: Nota 1 (editável)
+        tk.Label(frame_form, text="Nota 1:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=3, column=0, sticky='w', pady=8)
+        entry_nota1 = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_nota1.insert(0, str(nota1))
+        entry_nota1.grid(row=3, column=1, pady=8, padx=10)
+        
+        # Campo: Nota 2 (editável)
+        tk.Label(frame_form, text="Nota 2:", font=('Arial', 10, 'bold'), bg='#f0f0f0').grid(row=4, column=0, sticky='w', pady=8)
+        entry_nota2 = tk.Entry(frame_form, font=('Arial', 10), width=35)
+        entry_nota2.insert(0, str(nota2))
+        entry_nota2.grid(row=4, column=1, pady=8, padx=10)
+        
+        # -----------------------------------------------------------------
+        # FUNÇÃO INTERNA: Salvar as alterações
+        # -----------------------------------------------------------------
+        def salvar():
+            """
+            FUNÇÃO INTERNA: salvar()
+            OBJETIVO: Validar e salvar as alterações do aluno
+            """
+            novo_nome = entry_nome.get().strip()
+            novo_curso = entry_curso.get().strip()
+            
+            if not novo_nome or not novo_curso:
+                messagebox.showerror("Erro", "Nome e Curso são obrigatórios!")
+                return
+            
+            try:
+                nova_nota1 = float(entry_nota1.get())
+                nova_nota2 = float(entry_nota2.get())
+                if not (0 <= nova_nota1 <= 10 and 0 <= nova_nota2 <= 10):
+                    messagebox.showerror("Erro", "Notas devem estar entre 0 e 10!")
+                    return
+            except ValueError:
+                messagebox.showerror("Erro", "Notas devem ser números!")
+                return
+            
+            # Atualizar no banco de dados
+            atualizar_aluno(id_aluno, novo_nome, novo_curso, nova_nota1, nova_nota2)
+            messagebox.showinfo("Sucesso", "✅ Dados atualizados com sucesso!")
+            janela.destroy()
+            self.atualizar_tabela()  # Atualizar a tabela principal
+        
+        # Botões SALVAR e CANCELAR
+        frame_botoes = tk.Frame(frame_form, bg='#f0f0f0')
+        frame_botoes.grid(row=5, column=0, columnspan=2, pady=25)
+        
+        tk.Button(frame_botoes, text="SALVAR", command=salvar, 
+                 bg='#f39c12', fg='white', font=('Arial', 10, 'bold'), 
+                 padx=25, pady=8, cursor='hand2').pack(side=tk.LEFT, padx=10)
+        
+        tk.Button(frame_botoes, text="CANCELAR", command=janela.destroy, 
+                 bg='#95a5a6', fg='white', font=('Arial', 10, 'bold'), 
+                 padx=25, pady=8, cursor='hand2').pack(side=tk.LEFT, padx=10)
+
+
+# ================================================================
+# PARTE 4: FUNÇÃO PRINCIPAL
+# ================================================================
+
+# -----------------------------------------------------------------
+# FUNÇÃO PRINCIPAL: Iniciar a aplicação
+# -----------------------------------------------------------------
+def main():
+    """
+    FUNÇÃO: main()
+    OBJETIVO: Função principal que inicia a aplicação
+    """
+    # Criar a tabela no banco de dados (se não existir)
+    criar_tabela()
+    
+    # Iniciar a interface gráfica
+    root = tk.Tk()
+    app = SistemaAlunos(root)
+    root.mainloop()
+
+
+# -----------------------------------------------------------------
+# Ponto de entrada do programa
+# -----------------------------------------------------------------
+if __name__ == "__main__":
+    main()  # Aqui o programa COMEÇA A RODAR
